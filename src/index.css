@@ -1,0 +1,94 @@
+@import "tailwindcss";
+
+/* Direct Print Engine Styles */
+@media print {
+  /* Completely hide all UI toolbars, floating buttons, navigation, and badges */
+  .no-print,
+  .print-hide,
+  nav,
+  header,
+  footer,
+  aside,
+  dialog,
+  [role="dialog"] {
+    display: none !important;
+  }
+
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  #root {
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  #printable-container {
+    display: block !important;
+    position: static !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border: none !important;
+    background: transparent !important;
+  }
+
+  .print-sheet {
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .break-after-page {
+    break-after: page !important;
+    page-break-after: always !important;
+  }
+
+  .break-before-page {
+    break-before: page !important;
+    page-break-before: always !important;
+  }
+
+  @page {
+    margin: 8mm;
+    size: auto;
+  }
+}
+
+/* Document scanner high contrast enhancement for photographed documents */
+.doc-scan-enhanced {
+  filter: grayscale(100%) contrast(160%) brightness(105%);
+}
+
+/* Paper Aspect Ratio Preview styles on screen */
+.paper-letter {
+  min-height: 297mm;
+}
+
+.paper-label-4x6 {
+  max-width: 440px;
+}
+
+.paper-receipt-80mm {
+  max-width: 400px;
+}
+
