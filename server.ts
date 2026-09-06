@@ -41,13 +41,17 @@ let stationConfig = {
   shopSubtitle: 'Connected High-Speed Laser Printer Station',
   shopPhone: '+1 (555) 019-2831',
   shopAddress: 'Counter #1 • Main Entrance',
-  currency: '$',
-  pricePerBwPage: 0.15,
-  pricePerColorPage: 0.60,
+  currency: 'INR',
+  pricePerBwPage: 10,
+  pricePerColorPage: 10,
   autoPrintEnabled: true,
   autoPrintDelaySeconds: 2, // 2-second safe spool delay with audio chime
   soundAlertEnabled: true,
   allowCustomerUploads: true,
+  autoPrintMaxPages: 15,
+  autoPrintColorAllowed: true,
+  autoPrintRequirePaid: false,
+  targetPrinterName: 'Default System Printer',
 };
 
 let ordersQueue: OrderRecord[] = [
@@ -66,7 +70,7 @@ let ordersQueue: OrderRecord[] = [
     doubleSided: false,
     customerNotes: 'Please check high-quality print setting',
     status: 'completed',
-    estimatedPrice: 0.60,
+    estimatedPrice: 10.0,
     isPaid: true,
     printedAt: new Date(Date.now() - 4 * 60 * 1000).toISOString(),
     autoPrinted: true,
@@ -131,8 +135,10 @@ app.post('/api/orders', (req, res) => {
     const pages = Number(body.fileData?.pageCount || 1);
     const copies = Number(body.copies || 1);
     const isColor = body.colorMode === 'color';
-    const unitPrice = isColor ? stationConfig.pricePerColorPage : stationConfig.pricePerBwPage;
-    const estimatedPrice = parseFloat((pages * copies * unitPrice).toFixed(2));
+    const unitPrice = isColor
+      ? (typeof stationConfig.pricePerColorPage === 'number' ? stationConfig.pricePerColorPage : 10)
+      : (typeof stationConfig.pricePerBwPage === 'number' ? stationConfig.pricePerBwPage : 10);
+    const estimatedPrice = parseFloat(((pages * copies * unitPrice) || 0).toFixed(2));
 
     const newOrder: OrderRecord = {
       id: `ord-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,

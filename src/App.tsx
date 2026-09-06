@@ -10,6 +10,7 @@ import { getPrintJobFromUrl, isCustomerModeUrl } from './utils/codec';
 import { fetchStationConfig } from './utils/api';
 import { ShopOwnerStation } from './components/ShopOwnerStation';
 import { CustomerUploadPortal } from './components/CustomerUploadPortal';
+import { QrPrintAgent } from './components/QrPrintAgent';
 import { MobilePrintView } from './components/MobilePrintView';
 import { PrintStationModal } from './components/PrintStationModal';
 import { QRSharePanel } from './components/QRSharePanel';
@@ -24,10 +25,11 @@ import {
   QrCode,
   ShieldCheck,
   Zap,
-  ArrowRightLeft
+  ArrowRightLeft,
+  Cpu
 } from 'lucide-react';
 
-type AppViewMode = 'shop-station' | 'customer-portal' | 'template-builder';
+type AppViewMode = 'shop-station' | 'customer-portal' | 'template-builder' | 'qr-print-agent';
 
 export default function App() {
   // Default mode: Shop Owner PC connected printer station
@@ -42,9 +44,9 @@ export default function App() {
     shopSubtitle: 'Connected High-Speed Laser Printer Station',
     shopPhone: '+1 (555) 019-2831',
     shopAddress: 'Counter #1 • Main Entrance',
-    currency: '$',
-    pricePerBwPage: 0.15,
-    pricePerColorPage: 0.60,
+    currency: 'INR',
+    pricePerBwPage: 10,
+    pricePerColorPage: 10,
     autoPrintEnabled: true,
     autoPrintDelaySeconds: 2,
     soundAlertEnabled: true,
@@ -64,6 +66,13 @@ export default function App() {
       return;
     }
 
+    // 2b. Check if opened with ?mode=agent or ?agent=true
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'agent' || urlParams.get('agent') === 'true') {
+      setViewMode('qr-print-agent');
+      return;
+    }
+
     // 3. Check if opened with direct print job hash (#print=...)
     const jobFromUrl = getPrintJobFromUrl();
     if (jobFromUrl) {
@@ -77,6 +86,11 @@ export default function App() {
     const handleUrlChange = () => {
       if (isCustomerModeUrl()) {
         setViewMode('customer-portal');
+        return;
+      }
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get('mode') === 'agent' || urlParams.get('agent') === 'true') {
+        setViewMode('qr-print-agent');
         return;
       }
       const jobFromUrl = getPrintJobFromUrl();
@@ -136,7 +150,21 @@ export default function App() {
                 }`}
               >
                 <Store className="w-3.5 h-3.5" />
-                <span>Shop Owner PC (Connected Printer)</span>
+                <span>Shop Owner PC</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode('qr-print-agent')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg transition cursor-pointer ${
+                  viewMode === 'qr-print-agent'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'text-amber-400 hover:text-amber-300'
+                }`}
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                <span>QR Print Agent</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               </button>
 
               <button
@@ -149,7 +177,7 @@ export default function App() {
                 }`}
               >
                 <Smartphone className="w-3.5 h-3.5" />
-                <span>Customer Mobile (Scan &amp; Upload)</span>
+                <span>Customer Mobile</span>
               </button>
 
               <button
@@ -176,6 +204,17 @@ export default function App() {
           onUpdateStationConfig={(updated) => setStationConfig(updated)}
           onOpenCustomerPortal={() => setViewMode('customer-portal')}
           onOpenPlacardModal={() => setIsStationModalOpen(true)}
+          onOpenPrintAgent={() => setViewMode('qr-print-agent')}
+        />
+      )}
+
+      {/* VIEW 4: DEDICATED QR PRINT AGENT (AUTONOMOUS AUTO-PRINT SPOOLER) */}
+      {viewMode === 'qr-print-agent' && (
+        <QrPrintAgent
+          stationConfig={stationConfig}
+          onUpdateStationConfig={(updated) => setStationConfig(updated)}
+          onExitAgent={() => setViewMode('shop-station')}
+          onOpenCustomerPortal={() => setViewMode('customer-portal')}
         />
       )}
 

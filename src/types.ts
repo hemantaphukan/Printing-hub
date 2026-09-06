@@ -50,6 +50,18 @@ export interface StationConfig {
   autoPrintDelaySeconds: number; // 0 for instant, or 3 for safety chime countdown
   soundAlertEnabled: boolean;
   allowCustomerUploads: boolean;
+  autoPrintMaxPages?: number; // Safety threshold (e.g. 15 pages max)
+  autoPrintColorAllowed?: boolean; // If false, color prints hold for confirmation
+  autoPrintRequirePaid?: boolean; // If true, only auto-print paid orders
+  targetPrinterName?: string; // e.g. "Default Laser Printer"
+}
+
+export interface AgentLogEntry {
+  id: string;
+  timestamp: string;
+  type: 'info' | 'print' | 'warn' | 'success' | 'skip';
+  message: string;
+  ticketNumber?: string;
 }
 
 export interface UploadedFileData {

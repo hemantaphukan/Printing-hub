@@ -377,7 +377,18 @@ class P2PSyncService {
     if (typeof window === 'undefined') return [];
     try {
       const existing = localStorage.getItem('station_received_orders');
-      return existing ? JSON.parse(existing) : [];
+      if (!existing) return [];
+      const list: BusinessPrintOrder[] = JSON.parse(existing);
+      return list.map((order) => ({
+        ...order,
+        copies: typeof order.copies === 'number' && order.copies > 0 ? order.copies : 1,
+        estimatedPrice:
+          typeof order.estimatedPrice === 'number' && !isNaN(order.estimatedPrice)
+            ? order.estimatedPrice
+            : 0,
+        isPaid: Boolean(order.isPaid),
+        status: order.status || 'queued',
+      }));
     } catch (e) {
       return [];
     }

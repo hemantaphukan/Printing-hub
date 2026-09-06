@@ -117,10 +117,10 @@ export const PrintRenderer: React.FC<PrintRendererProps> = ({ job, isPrintMode =
             </div>
             {job.receipt.items.map((item) => (
               <div key={item.id} className="grid grid-cols-12 py-1 text-slate-800">
-                <span className="col-span-2 font-semibold">{item.qty}x</span>
+                <span className="col-span-2 font-semibold">{item.qty || 1}x</span>
                 <span className="col-span-7 truncate pr-1">{item.name}</span>
                 <span className="col-span-3 text-right">
-                  ${(item.qty * item.price).toFixed(2)}
+                  ${(((item.qty || 1) * (item.price || 0)) || 0).toFixed(2)}
                 </span>
               </div>
             ))}
@@ -129,10 +129,10 @@ export const PrintRenderer: React.FC<PrintRendererProps> = ({ job, isPrintMode =
           {/* Calculations */}
           {(() => {
             const subtotal = job.receipt.items.reduce(
-              (acc, item) => acc + item.qty * item.price,
+              (acc, item) => acc + (item.qty || 1) * (item.price || 0),
               0
-            );
-            const tax = (subtotal * job.receipt.taxPercent) / 100;
+            ) || 0;
+            const tax = ((subtotal * (job.receipt.taxPercent || 0)) / 100) || 0;
             const tip = job.receipt.tipAmount || 0;
             const grandTotal = subtotal + tax + tip;
 
@@ -140,21 +140,21 @@ export const PrintRenderer: React.FC<PrintRendererProps> = ({ job, isPrintMode =
               <div className="py-3 border-b border-dashed border-slate-400 space-y-1.5 text-[11px]">
                 <div className="flex justify-between text-slate-600">
                   <span>Subtotal</span>
-                  <span>${subtotal.toFixed(2)}</span>
+                  <span>${(subtotal || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-slate-600">
-                  <span>Tax ({job.receipt.taxPercent}%)</span>
-                  <span>${tax.toFixed(2)}</span>
+                  <span>Tax ({job.receipt.taxPercent || 0}%)</span>
+                  <span>${(tax || 0).toFixed(2)}</span>
                 </div>
                 {tip > 0 && (
                   <div className="flex justify-between text-slate-600">
                     <span>Tip</span>
-                    <span>${tip.toFixed(2)}</span>
+                    <span>${(tip || 0).toFixed(2)}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm font-bold pt-2 border-t border-slate-800 text-slate-900">
                   <span>TOTAL DUE</span>
-                  <span>${grandTotal.toFixed(2)}</span>
+                  <span>${(grandTotal || 0).toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-[10px] text-slate-500 pt-1">
                   <span>Payment Method:</span>

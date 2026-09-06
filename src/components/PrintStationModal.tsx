@@ -156,9 +156,15 @@ export const PrintStationModal: React.FC<PrintStationModalProps> = ({
 
           {stationConfig && (
             <div className="flex items-center justify-center gap-4 text-[11px] font-bold text-slate-600 bg-slate-100/80 py-2 px-3 rounded-xl">
-              <span>B&amp;W: {stationConfig.currency}{stationConfig.pricePerBwPage.toFixed(2)}/pg</span>
+              <span>
+                B&amp;W: {stationConfig.currency || '$'}
+                {(stationConfig.pricePerBwPage ?? 0.15).toFixed(2)}/pg
+              </span>
               <span>•</span>
-              <span>Color: {stationConfig.currency}{stationConfig.pricePerColorPage.toFixed(2)}/pg</span>
+              <span>
+                Color: {stationConfig.currency || '$'}
+                {(stationConfig.pricePerColorPage ?? 0.60).toFixed(2)}/pg
+              </span>
             </div>
           )}
 

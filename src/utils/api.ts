@@ -4,6 +4,15 @@ import { p2pSync } from './p2pSync';
 const BASE_URL = '';
 const CONFIG_STORAGE_KEY = 'business_station_config';
 
+/**
+ * Format currency amount cleanly with symbol or code (e.g. "INR 10.00", "₹10.00", "$10.00")
+ */
+export function formatCurrency(amount: number, currency: string = 'INR'): string {
+  const safeAmount = (typeof amount === 'number' && !isNaN(amount) ? amount : 0).toFixed(2);
+  const safeCurr = (currency || 'INR').trim();
+  return safeCurr.length > 1 ? `${safeCurr} ${safeAmount}` : `${safeCurr}${safeAmount}`;
+}
+
 function getDefaultConfig(): StationConfig {
   let storedStationId = '';
   if (typeof window !== 'undefined') {
@@ -20,13 +29,71 @@ function getDefaultConfig(): StationConfig {
     shopSubtitle: 'Connected High-Speed Laser Printer Station',
     shopPhone: '+1 (555) 019-2831',
     shopAddress: 'Counter #1 • Main Entrance',
-    currency: '$',
-    pricePerBwPage: 0.15,
-    pricePerColorPage: 0.60,
+    currency: 'INR',
+    pricePerBwPage: 10,
+    pricePerColorPage: 10,
     autoPrintEnabled: true,
     autoPrintDelaySeconds: 2,
     soundAlertEnabled: true,
     allowCustomerUploads: true,
+    autoPrintMaxPages: 15,
+    autoPrintColorAllowed: true,
+    autoPrintRequirePaid: false,
+    targetPrinterName: 'Default System Printer',
+  };
+}
+
+export function sanitizeStationConfig(cfg?: Partial<StationConfig>): StationConfig {
+  const defaults = getDefaultConfig();
+  if (!cfg) return defaults;
+  return {
+    ...defaults,
+    ...cfg,
+    pricePerBwPage:
+      typeof cfg.pricePerBwPage === 'number' && !isNaN(cfg.pricePerBwPage)
+        ? cfg.pricePerBwPage
+        : defaults.pricePerBwPage,
+    pricePerColorPage:
+      typeof cfg.pricePerColorPage === 'number' && !isNaN(cfg.pricePerColorPage)
+        ? cfg.pricePerColorPage
+        : defaults.pricePerColorPage,
+    autoPrintDelaySeconds:
+      typeof cfg.autoPrintDelaySeconds === 'number' && !isNaN(cfg.autoPrintDelaySeconds)
+        ? cfg.autoPrintDelaySeconds
+        : defaults.autoPrintDelaySeconds,
+    autoPrintMaxPages:
+      typeof cfg.autoPrintMaxPages === 'number' && !isNaN(cfg.autoPrintMaxPages)
+        ? cfg.autoPrintMaxPages
+        : defaults.autoPrintMaxPages ?? 15,
+  };
+}
+
+export function sanitizeOrder(order: any): BusinessPrintOrder {
+  if (!order) {
+    return {
+      id: `ord-fallback-${Date.now()}`,
+      ticketNumber: '#A-000',
+      createdAt: new Date().toISOString(),
+      fileData: { fileName: 'Document', fileSize: 0, mimeType: 'text/plain', category: 'text' },
+      paperSize: 'letter',
+      orientation: 'portrait',
+      colorMode: 'grayscale',
+      copies: 1,
+      status: 'queued',
+      estimatedPrice: 0,
+      isPaid: false,
+    };
+  }
+
+  const rawPrice = order.estimatedPrice;
+  const estimatedPrice = typeof rawPrice === 'number' && !isNaN(rawPrice) ? rawPrice : 0;
+
+  return {
+    ...order,
+    copies: typeof order.copies === 'number' && order.copies > 0 ? order.copies : 1,
+    estimatedPrice,
+    isPaid: Boolean(order.isPaid),
+    status: order.status || 'queued',
   };
 }
 
@@ -36,7 +103,19 @@ export async function fetchStationConfig(): Promise<StationConfig> {
   if (typeof window !== 'undefined') {
     try {
       const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
-      if (saved) localSaved = JSON.parse(saved);
+      if (saved) {
+        localSaved = JSON.parse(saved);
+        // Automatically upgrade obsolete $ or old 0.15/0.60 defaults to requested INR & 10
+        if (localSaved.currency === '$') {
+          localSaved.currency = 'INR';
+        }
+        if (localSaved.pricePerBwPage === 0.15) {
+          localSaved.pricePerBwPage = 10;
+        }
+        if (localSaved.pricePerColorPage === 0.60) {
+          localSaved.pricePerColorPage = 10;
+        }
+      }
     } catch (e) {
       // ignore
     }
@@ -46,7 +125,7 @@ export async function fetchStationConfig(): Promise<StationConfig> {
     const res = await fetch(`${BASE_URL}/api/station-config`);
     if (res.ok) {
       const serverConfig = await res.json();
-      const merged = { ...defaults, ...localSaved, ...serverConfig };
+      const merged = sanitizeStationConfig({ ...defaults, ...localSaved, ...serverConfig });
       if (typeof window !== 'undefined') {
         localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(merged));
       }
@@ -56,17 +135,17 @@ export async function fetchStationConfig(): Promise<StationConfig> {
     // Offline or static Netlify hosting
   }
 
-  return { ...defaults, ...localSaved };
+  return sanitizeStationConfig({ ...defaults, ...localSaved });
 }
 
 export async function updateStationConfig(config: Partial<StationConfig>): Promise<StationConfig> {
-  let merged: StationConfig = { ...getDefaultConfig(), ...config };
+  let merged: StationConfig = sanitizeStationConfig(config);
 
   if (typeof window !== 'undefined') {
     try {
       const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
       const existing = saved ? JSON.parse(saved) : {};
-      merged = { ...getDefaultConfig(), ...existing, ...config };
+      merged = sanitizeStationConfig({ ...existing, ...config });
       localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(merged));
       if (merged.stationId) {
         localStorage.setItem('business_station_id', merged.stationId);
@@ -80,11 +159,11 @@ export async function updateStationConfig(config: Partial<StationConfig>): Promi
     const res = await fetch(`${BASE_URL}/api/station-config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
+      body: JSON.stringify(merged),
     });
     if (res.ok) {
       const data = await res.json();
-      return data.config;
+      return sanitizeStationConfig(data.config);
     }
   } catch (e) {
     // Netlify static deployment
@@ -102,17 +181,17 @@ export async function fetchOrders(): Promise<BusinessPrintOrder[]> {
       const serverOrders: BusinessPrintOrder[] = await res.json();
       // Merge unique by ID, preferring server
       const map = new Map<string, BusinessPrintOrder>();
-      localOrders.forEach((o) => map.set(o.id, o));
-      serverOrders.forEach((o) => map.set(o.id, o));
-      return Array.from(map.values()).sort(
-        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+      localOrders.forEach((o) => map.set(o.id, sanitizeOrder(o)));
+      serverOrders.forEach((o) => map.set(o.id, sanitizeOrder(o)));
+      return Array.from(map.values())
+        .map(sanitizeOrder)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }
   } catch (err) {
     // Netlify static mode
   }
 
-  return localOrders;
+  return localOrders.map(sanitizeOrder);
 }
 
 export async function submitCustomerOrder(orderPayload: {
@@ -128,9 +207,13 @@ export async function submitCustomerOrder(orderPayload: {
   customerNotes?: string;
 }): Promise<{ order: BusinessPrintOrder; stationConfig: StationConfig }> {
   // Construct complete order
-  const unitRate = orderPayload.colorMode === 'color' ? 0.60 : 0.15;
+  const currentConfig = await fetchStationConfig();
+  const unitRate =
+    orderPayload.colorMode === 'color'
+      ? (currentConfig.pricePerColorPage ?? 10)
+      : (currentConfig.pricePerBwPage ?? 10);
   const pageCount = orderPayload.fileData?.pageCount || 1;
-  const estimatedPrice = parseFloat((pageCount * orderPayload.copies * unitRate).toFixed(2));
+  const estimatedPrice = parseFloat(((pageCount * orderPayload.copies * unitRate) || 0).toFixed(2));
 
   const order: BusinessPrintOrder = {
     id: `order-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,

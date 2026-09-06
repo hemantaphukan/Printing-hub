@@ -8,7 +8,7 @@ import {
   createSampleDualSideIdData,
   readFileAsDataUrl,
 } from '../utils/fileProcessor';
-import { submitCustomerOrder } from '../utils/api';
+import { submitCustomerOrder, formatCurrency } from '../utils/api';
 import { p2pSync, ConnectionStatus } from '../utils/p2pSync';
 import { getStationIdFromUrl } from '../utils/codec';
 import {
@@ -84,8 +84,16 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
 
   // Cost calculation
   const pageCount = selectedFile?.pageCount || 1;
-  const unitRate = colorMode === 'color' ? liveConfig.pricePerColorPage : liveConfig.pricePerBwPage;
-  const estimatedTotal = parseFloat((pageCount * copies * unitRate).toFixed(2));
+  const bwRate =
+    typeof liveConfig?.pricePerBwPage === 'number' && !isNaN(liveConfig.pricePerBwPage)
+      ? liveConfig.pricePerBwPage
+      : 10;
+  const colorRate =
+    typeof liveConfig?.pricePerColorPage === 'number' && !isNaN(liveConfig.pricePerColorPage)
+      ? liveConfig.pricePerColorPage
+      : 10;
+  const unitRate = colorMode === 'color' ? colorRate : bwRate;
+  const estimatedTotal = parseFloat(((pageCount * (copies || 1) * unitRate) || 0).toFixed(2));
 
   // Initialize P2P connection to Shop Owner PC Station
   useEffect(() => {
@@ -437,8 +445,7 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
               <span>
                 Black &amp; White:{' '}
                 <strong className="text-white">
-                  {liveConfig.currency}
-                  {liveConfig.pricePerBwPage.toFixed(2)}
+                  {formatCurrency(bwRate, liveConfig?.currency)}
                 </strong>
                 /pg
               </span>
@@ -446,8 +453,7 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
               <span>
                 Full Color:{' '}
                 <strong className="text-emerald-400">
-                  {liveConfig.currency}
-                  {liveConfig.pricePerColorPage.toFixed(2)}
+                  {formatCurrency(colorRate, liveConfig?.currency)}
                 </strong>
                 /pg
               </span>
@@ -551,8 +557,7 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
               <div className="flex justify-between pt-2 border-t border-slate-200 font-bold text-sm text-slate-900">
                 <span>Total Due at Counter:</span>
                 <span className="text-emerald-700">
-                  {liveConfig.currency}
-                  {submittedOrder.estimatedPrice.toFixed(2)}
+                  {formatCurrency((submittedOrder.estimatedPrice ?? estimatedTotal) || 0, liveConfig?.currency)}
                 </span>
               </div>
             </div>
@@ -1054,8 +1059,7 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
                         colorMode === 'grayscale' ? 'text-slate-300' : 'text-slate-500'
                       }`}
                     >
-                      {liveConfig.currency}
-                      {liveConfig.pricePerBwPage.toFixed(2)} per page
+                      {formatCurrency(bwRate, liveConfig?.currency)} per page
                     </div>
                   </button>
 
@@ -1077,8 +1081,7 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
                         colorMode === 'color' ? 'text-slate-300' : 'text-slate-500'
                       }`}
                     >
-                      {liveConfig.currency}
-                      {liveConfig.pricePerColorPage.toFixed(2)} per page
+                      {formatCurrency(colorRate, liveConfig?.currency)} per page
                     </div>
                   </button>
                 </div>
@@ -1229,8 +1232,7 @@ export const CustomerUploadPortal: React.FC<CustomerUploadPortalProps> = ({
                 <div>
                   <span className="text-xs text-slate-500 block">Total Estimated Cost</span>
                   <div className="text-2xl font-black text-slate-900">
-                    {liveConfig.currency}
-                    {estimatedTotal.toFixed(2)}
+                    {formatCurrency(estimatedTotal || 0, liveConfig?.currency)}
                   </div>
                 </div>
                 <div className="text-right text-xs text-slate-500">

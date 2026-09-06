@@ -7,6 +7,7 @@ import {
   clearCompletedOrders,
   subscribeToOrdersStream,
   updateStationConfig,
+  formatCurrency,
 } from '../utils/api';
 import { soundManager } from '../utils/audioChime';
 import { buildCustomerUploadUrl, generateQrDataUrl } from '../utils/codec';
@@ -44,7 +45,8 @@ import {
   X,
   Pause,
   Globe,
-  Radio
+  Radio,
+  Cpu
 } from 'lucide-react';
 
 interface ShopOwnerStationProps {
@@ -52,6 +54,7 @@ interface ShopOwnerStationProps {
   onUpdateStationConfig: (config: StationConfig) => void;
   onOpenCustomerPortal: () => void;
   onOpenPlacardModal: () => void;
+  onOpenPrintAgent?: () => void;
 }
 
 export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
@@ -59,6 +62,7 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
   onUpdateStationConfig,
   onOpenCustomerPortal,
   onOpenPlacardModal,
+  onOpenPrintAgent,
 }) => {
   const [orders, setOrders] = useState<BusinessPrintOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -346,6 +350,20 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
 
           {/* Master Toggles & Quick Actions */}
           <div className="flex flex-wrap items-center gap-2.5">
+            {/* Dedicated QR Print Agent Launcher */}
+            {onOpenPrintAgent && (
+              <button
+                type="button"
+                onClick={onOpenPrintAgent}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs transition cursor-pointer shadow-md shadow-amber-500/20"
+                title="Launch the dedicated autonomous QR Print Agent dashboard"
+              >
+                <Cpu className="w-4 h-4" />
+                <span>QR Print Agent</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-700 animate-pulse" />
+              </button>
+            )}
+
             {/* Auto-Print Master Switch */}
             <button
               type="button"
@@ -471,6 +489,17 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
               </div>
 
               <div className="flex items-center gap-2 shrink-0">
+                {onOpenPrintAgent && (
+                  <button
+                    type="button"
+                    onClick={onOpenPrintAgent}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 text-white hover:bg-slate-800 text-xs font-bold transition cursor-pointer shadow-xs"
+                  >
+                    <Cpu className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Launch QR Print Agent</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setShowKioskModal(true)}
@@ -520,8 +549,7 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
                 </span>
                 <div className="flex items-baseline gap-1 mt-1">
                   <span className="text-2xl font-black text-emerald-700 font-mono">
-                    {stationConfig.currency}
-                    {unpaidRevenue.toFixed(2)}
+                    {formatCurrency(unpaidRevenue || 0, stationConfig.currency)}
                   </span>
                   <span className="text-[10px] text-slate-400">due</span>
                 </div>
@@ -750,8 +778,7 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
                     <div className="flex items-center gap-4">
                       <div className="text-right">
                         <div className="text-base font-black text-slate-900 font-mono">
-                          {stationConfig.currency}
-                          {order.estimatedPrice.toFixed(2)}
+                          {formatCurrency(order.estimatedPrice ?? 0, stationConfig.currency)}
                         </div>
                         <button
                           type="button"
@@ -950,17 +977,38 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Currency Symbol</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 text-xs">
+                      Currency Symbol
+                    </label>
+                  </div>
                   <input
                     type="text"
                     value={editConfig.currency}
                     onChange={(e) => setEditConfig({ ...editConfig, currency: e.target.value })}
+                    placeholder="INR"
                     className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 font-mono"
                   />
+                  <div className="flex flex-wrap gap-1 mt-1.5">
+                    {['INR', '₹', 'Rs.', '$', '€'].map((curr) => (
+                      <button
+                        key={curr}
+                        type="button"
+                        onClick={() => setEditConfig({ ...editConfig, currency: curr })}
+                        className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold transition cursor-pointer ${
+                          editConfig.currency === curr
+                            ? 'bg-amber-400 text-slate-950 shadow-xs'
+                            : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                        }`}
+                      >
+                        {curr}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Auto-Print Delay</label>
+                  <label className="block font-semibold text-slate-700 mb-1 text-xs">Auto-Print Delay</label>
                   <select
                     value={editConfig.autoPrintDelaySeconds}
                     onChange={(e) =>
@@ -980,39 +1028,146 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Rate per B&amp;W Page
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editConfig.pricePerBwPage}
-                    onChange={(e) =>
-                      setEditConfig({
-                        ...editConfig,
-                        pricePerBwPage: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 font-mono"
-                  />
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 text-xs">
+                      Rate per B&amp;W Page ({editConfig.currency || 'INR'})
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={editConfig.pricePerBwPage}
+                      onChange={(e) =>
+                        setEditConfig({
+                          ...editConfig,
+                          pricePerBwPage: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 font-mono"
+                    />
+                  </div>
+                  <div className="flex gap-1 mt-1.5">
+                    {[5, 10, 15, 20].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setEditConfig({ ...editConfig, pricePerBwPage: rate })}
+                        className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium transition cursor-pointer ${
+                          editConfig.pricePerBwPage === rate
+                            ? 'bg-indigo-100 text-indigo-800 border border-indigo-300 font-bold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {rate}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">
-                    Rate per Color Page
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block font-semibold text-slate-700 text-xs">
+                      Rate per Color Page ({editConfig.currency || 'INR'})
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      value={editConfig.pricePerColorPage}
+                      onChange={(e) =>
+                        setEditConfig({
+                          ...editConfig,
+                          pricePerColorPage: parseFloat(e.target.value) || 0,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 font-mono"
+                    />
+                  </div>
+                  <div className="flex gap-1 mt-1.5">
+                    {[5, 10, 15, 20].map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => setEditConfig({ ...editConfig, pricePerColorPage: rate })}
+                        className={`text-[10px] px-2 py-0.5 rounded font-mono font-medium transition cursor-pointer ${
+                          editConfig.pricePerColorPage === rate
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold'
+                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                        }`}
+                      >
+                        {rate}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* QR Print Agent Settings */}
+              <div className="pt-2 border-t border-slate-200 space-y-3">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                  QR Print Agent Rules
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Target Printer Name
+                    </label>
+                    <input
+                      type="text"
+                      value={editConfig.targetPrinterName || ''}
+                      onChange={(e) =>
+                        setEditConfig({
+                          ...editConfig,
+                          targetPrinterName: e.target.value,
+                        })
+                      }
+                      placeholder="Default Laser Printer"
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-slate-700 mb-1">
+                      Max Auto-Print Pages Limit
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={editConfig.autoPrintMaxPages ?? 15}
+                      onChange={(e) =>
+                        setEditConfig({
+                          ...editConfig,
+                          autoPrintMaxPages: parseInt(e.target.value) || 15,
+                        })
+                      }
+                      className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={editConfig.autoPrintColorAllowed ?? true}
+                      onChange={(e) =>
+                        setEditConfig({
+                          ...editConfig,
+                          autoPrintColorAllowed: e.target.checked,
+                        })
+                      }
+                      className="rounded accent-slate-900 w-4 h-4"
+                    />
+                    <span className="text-xs font-semibold text-slate-700">
+                      Allow Color Documents to Auto-Print (Uncheck to require manual confirmation)
+                    </span>
                   </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editConfig.pricePerColorPage}
-                    onChange={(e) =>
-                      setEditConfig({
-                        ...editConfig,
-                        pricePerColorPage: parseFloat(e.target.value) || 0,
-                      })
-                    }
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 font-mono"
-                  />
                 </div>
               </div>
 
