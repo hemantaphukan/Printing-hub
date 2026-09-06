@@ -10,6 +10,7 @@ import {
 } from '../utils/api';
 import { soundManager } from '../utils/audioChime';
 import { buildCustomerUploadUrl, generateQrDataUrl } from '../utils/codec';
+import { p2pSync, ConnectionStatus } from '../utils/p2pSync';
 import { UploadedFileRenderer } from './UploadedFileRenderer';
 import { formatBytes } from '../utils/fileProcessor';
 import {
@@ -41,7 +42,9 @@ import {
   Info,
   Layers,
   X,
-  Pause
+  Pause,
+  Globe,
+  Radio
 } from 'lucide-react';
 
 interface ShopOwnerStationProps {
@@ -71,11 +74,18 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
   const [previewOrder, setPreviewOrder] = useState<BusinessPrintOrder | null>(null);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showKioskModal, setShowKioskModal] = useState(false);
+  const [showNetlifyModal, setShowNetlifyModal] = useState(false);
+
+  // P2P synchronization state
+  const [p2pStatus, setP2pStatus] = useState<ConnectionStatus>('connecting');
+  const [p2pMessage, setP2pMessage] = useState<string>('');
 
   // Settings form state
   const [editConfig, setEditConfig] = useState<StationConfig>(stationConfig);
 
   const countdownTimerRef = useRef<any>(null);
+
+  const stationId = stationConfig.stationId || 'counter-main';
 
   // 1. Initial orders load & QR generation
   useEffect(() => {
@@ -94,17 +104,44 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
     };
     load();
 
-    const uploadUrl = buildCustomerUploadUrl();
+    const uploadUrl = buildCustomerUploadUrl(stationId);
     generateQrDataUrl(uploadUrl, 2, 400).then((dataUrl) => {
       if (isMounted) setCounterQrUrl(dataUrl);
     });
 
+    // 2. Initialize WebRTC P2P Direct Receiver for Mobile uploads (Netlify static support)
+    p2pSync.initHost(
+      stationId,
+      () => stationConfig,
+      (newOrder) => {
+        setOrders((prev) => {
+          if (prev.some((o) => o.id === newOrder.id)) return prev;
+          return [newOrder, ...prev];
+        });
+
+        if (soundEnabled) {
+          soundManager.playNewJobChime();
+        }
+
+        if (autoPrintEnabled) {
+          queueAutoPrint(newOrder);
+        }
+      },
+      (status, msg) => {
+        if (isMounted) {
+          setP2pStatus(status);
+          if (msg) setP2pMessage(msg);
+        }
+      }
+    );
+
     return () => {
       isMounted = false;
+      p2pSync.destroy();
     };
-  }, []);
+  }, [stationId]);
 
-  // 2. Real-time Server-Sent Events (SSE) subscription for incoming orders from customer phones
+  // 3. Real-time Server-Sent Events (SSE) subscription for incoming orders from customer phones
   useEffect(() => {
     const unsubscribe = subscribeToOrdersStream({
       onNewOrder: (newOrder) => {
@@ -182,12 +219,15 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
           soundManager.playPrintSentChord();
         }
 
-        // Mark as completed on server
+        // Mark as completed on server and P2P
+        p2pSync.updateOrderStatus(order.id, 'completed');
         updateOrderStatus(order.id, {
           status: 'completed',
           autoPrinted: true,
         }).then((updated) => {
           setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+        }).catch(() => {
+          setOrders((prev) => prev.map((o) => (o.id === order.id ? { ...o, status: 'completed', autoPrinted: true } : o)));
         });
 
         // Clear active after print dialog
@@ -352,6 +392,17 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
             >
               <QrCode className="w-4 h-4 text-amber-400" />
               <span>Print Counter Sign</span>
+            </button>
+
+            {/* Netlify & GitHub Deployment Helper */}
+            <button
+              type="button"
+              onClick={() => setShowNetlifyModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-950 hover:bg-cyan-900 text-cyan-300 font-semibold text-xs border border-cyan-800/80 transition cursor-pointer"
+              title="How to publish this on GitHub and Netlify"
+            >
+              <Globe className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Netlify &amp; GitHub</span>
             </button>
 
             {/* Customer Portal Preview */}
@@ -867,14 +918,34 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
             </div>
 
             <form onSubmit={handleSaveSettings} className="space-y-4 pt-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Shop / Business Name</label>
-                <input
-                  type="text"
-                  value={editConfig.shopName}
-                  onChange={(e) => setEditConfig({ ...editConfig, shopName: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Shop / Business Name</label>
+                  <input
+                    type="text"
+                    value={editConfig.shopName}
+                    onChange={(e) => setEditConfig({ ...editConfig, shopName: e.target.value })}
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Station Code (Pairs QR to this PC)
+                  </label>
+                  <input
+                    type="text"
+                    value={editConfig.stationId || ''}
+                    onChange={(e) =>
+                      setEditConfig({
+                        ...editConfig,
+                        stationId: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+                      })
+                    }
+                    placeholder="counter-1"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-mono font-semibold text-slate-900"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -1018,6 +1089,93 @@ export const ShopOwnerStation: React.FC<ShopOwnerStationProps> = ({
               className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer"
             >
               Got It
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 8. NETLIFY & GITHUB DEPLOYMENT GUIDE MODAL */}
+      {showNetlifyModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 bg-slate-900/75 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+        >
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-slate-200 relative my-6 space-y-5">
+            <button
+              onClick={() => setShowNetlifyModal(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-slate-800 rounded-full hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 pb-3 border-b border-slate-200">
+              <div className="w-11 h-11 rounded-2xl bg-cyan-100 text-cyan-900 flex items-center justify-center">
+                <Globe className="w-6 h-6 text-cyan-600" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Deploy to GitHub &amp; Netlify
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Zero server cost • Direct mobile-to-PC WebRTC printing
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs text-slate-600 space-y-4 leading-relaxed">
+              <div className="bg-cyan-50 border border-cyan-200 rounded-2xl p-3.5 flex gap-2.5">
+                <Info className="w-5 h-5 text-cyan-700 shrink-0 mt-0.5" />
+                <p className="text-cyan-900 font-medium leading-normal">
+                  This app is engineered to run as a 100% static site on <strong>Netlify</strong>. Customer phones connect directly to your shop PC via <strong>WebRTC P2P Data Channels</strong>, requiring zero server maintenance or database costs!
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <div className="font-bold text-slate-900 text-xs uppercase tracking-wider">
+                  Step 1: Push Project to GitHub
+                </div>
+                <div className="bg-slate-900 text-slate-100 p-3 rounded-xl font-mono text-[11px] space-y-1 select-all">
+                  <div>git init</div>
+                  <div>git add .</div>
+                  <div>git commit -m &quot;Universal Mobile Print Station&quot;</div>
+                  <div>git branch -M main</div>
+                  <div>git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO.git</div>
+                  <div>git push -u origin main</div>
+                </div>
+
+                <div className="font-bold text-slate-900 text-xs uppercase tracking-wider pt-2">
+                  Step 2: Connect Repo in Netlify
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-slate-700">
+                  <p>1. Go to <strong className="text-slate-900">app.netlify.com</strong> and click <strong>&quot;Add new site&quot; &gt; &quot;Import an existing project&quot;</strong>.</p>
+                  <p>2. Select <strong>GitHub</strong> and choose your repository.</p>
+                  <p>3. Netlify will auto-detect the configuration from <code className="text-cyan-700 font-bold">netlify.toml</code>:</p>
+                  <ul className="list-disc pl-5 space-y-0.5 text-slate-600 text-[11px]">
+                    <li>Build command: <code className="text-slate-800 font-mono">npm run build</code></li>
+                    <li>Publish directory: <code className="text-slate-800 font-mono">dist</code></li>
+                    <li>Single Page App redirect: <code className="text-slate-800 font-mono">/* -&gt; /index.html 200</code></li>
+                  </ul>
+                  <p>4. Click <strong>&quot;Deploy site&quot;</strong>.</p>
+                </div>
+
+                <div className="font-bold text-slate-900 text-xs uppercase tracking-wider pt-2">
+                  Step 3: Setup Counter PC &amp; Connected Printer
+                </div>
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-1.5 text-slate-700">
+                  <p>1. On your shop PC, open your published Netlify URL (e.g. <code className="text-cyan-700">https://your-shop.netlify.app</code>).</p>
+                  <p>2. Click <strong>&quot;Print Counter Sign&quot;</strong> to print the counter placard with your station QR code.</p>
+                  <p>3. When customers scan the QR code with their mobile phone, they upload files directly to your counter PC screen ready for printing!</p>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowNetlifyModal(false)}
+              className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+            >
+              Close Guide
             </button>
           </div>
         </div>

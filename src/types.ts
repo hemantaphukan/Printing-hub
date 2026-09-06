@@ -38,6 +38,7 @@ export interface BusinessPrintOrder {
 }
 
 export interface StationConfig {
+  stationId?: string; // WebRTC P2P station identifier for Netlify static deployment
   shopName: string;
   shopSubtitle?: string;
   shopPhone?: string;
@@ -63,6 +64,10 @@ export interface UploadedFileData {
   imageFit?: 'fit-page' | 'original' | '2-up' | 'full-bleed';
   documentContrastFilter?: boolean; // Enhanced high-contrast B&W for document scans
   showPageNumbers?: boolean;
+  isDualSideId?: boolean; // Front & Back image mode
+  frontImage?: { dataUrl: string; fileName: string; fileSize: number };
+  backImage?: { dataUrl: string; fileName: string; fileSize: number };
+  dualLayout?: 'stacked-1page' | 'side-by-side-1page' | 'separate-2pages';
 }
 
 export interface ReceiptItem {

@@ -22,7 +22,7 @@ export const PrintStationModal: React.FC<PrintStationModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     const load = async () => {
-      let url = buildCustomerUploadUrl();
+      let url = buildCustomerUploadUrl(stationConfig?.stationId);
       if (stationMode === 'station') {
         url = buildStationUrl();
       } else if (stationMode === 'job') {
@@ -116,7 +116,7 @@ export const PrintStationModal: React.FC<PrintStationModalProps> = ({
             </h2>
             <p className="text-xs text-slate-600 mt-1 max-w-sm mx-auto leading-relaxed">
               {stationMode === 'business-counter'
-                ? 'Scan with your phone camera to select your PDF or Photo. Our connected printer prints it automatically!'
+                ? 'Scan with your phone camera to select your PDF or Photo. No login or app required — prints directly!'
                 : stationMode === 'station'
                 ? 'Point your phone camera here to print any PDF, photo, or document directly to this printer.'
                 : 'Point your camera at this QR to print this document on this printer instantly.'}
@@ -146,7 +146,7 @@ export const PrintStationModal: React.FC<PrintStationModalProps> = ({
             </div>
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">2</span>
-              <span>Select your PDF, Photo, or camera document scan</span>
+              <span>Select your PDF, Photo, or camera document scan (Instant guest upload, no login)</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-4 h-4 rounded-full bg-slate-900 text-white flex items-center justify-center text-[10px] font-bold">3</span>

@@ -1,50 +1,118 @@
 import { BusinessPrintOrder, StationConfig } from '../types';
+import { p2pSync } from './p2pSync';
 
 const BASE_URL = '';
+const CONFIG_STORAGE_KEY = 'business_station_config';
+
+function getDefaultConfig(): StationConfig {
+  let storedStationId = '';
+  if (typeof window !== 'undefined') {
+    storedStationId = localStorage.getItem('business_station_id') || '';
+    if (!storedStationId) {
+      storedStationId = `counter-${Math.random().toString(36).substring(2, 7)}`;
+      localStorage.setItem('business_station_id', storedStationId);
+    }
+  }
+
+  return {
+    stationId: storedStationId || 'counter-main',
+    shopName: 'QuickPrint Shop & Copy Center',
+    shopSubtitle: 'Connected High-Speed Laser Printer Station',
+    shopPhone: '+1 (555) 019-2831',
+    shopAddress: 'Counter #1 • Main Entrance',
+    currency: '$',
+    pricePerBwPage: 0.15,
+    pricePerColorPage: 0.60,
+    autoPrintEnabled: true,
+    autoPrintDelaySeconds: 2,
+    soundAlertEnabled: true,
+    allowCustomerUploads: true,
+  };
+}
 
 export async function fetchStationConfig(): Promise<StationConfig> {
+  const defaults = getDefaultConfig();
+  let localSaved: Partial<StationConfig> = {};
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
+      if (saved) localSaved = JSON.parse(saved);
+    } catch (e) {
+      // ignore
+    }
+  }
+
   try {
     const res = await fetch(`${BASE_URL}/api/station-config`);
-    if (!res.ok) throw new Error('Failed to fetch station config');
-    return await res.json();
+    if (res.ok) {
+      const serverConfig = await res.json();
+      const merged = { ...defaults, ...localSaved, ...serverConfig };
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(merged));
+      }
+      return merged;
+    }
   } catch (err) {
-    console.warn('Using default station config fallback:', err);
-    return {
-      shopName: 'QuickPrint Shop & Copy Center',
-      shopSubtitle: 'Connected High-Speed Laser Printer Station',
-      shopPhone: '+1 (555) 019-2831',
-      shopAddress: 'Counter #1 • Main Entrance',
-      currency: '$',
-      pricePerBwPage: 0.15,
-      pricePerColorPage: 0.60,
-      autoPrintEnabled: true,
-      autoPrintDelaySeconds: 2,
-      soundAlertEnabled: true,
-      allowCustomerUploads: true,
-    };
+    // Offline or static Netlify hosting
   }
+
+  return { ...defaults, ...localSaved };
 }
 
 export async function updateStationConfig(config: Partial<StationConfig>): Promise<StationConfig> {
-  const res = await fetch(`${BASE_URL}/api/station-config`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) throw new Error('Failed to update station config');
-  const data = await res.json();
-  return data.config;
+  let merged: StationConfig = { ...getDefaultConfig(), ...config };
+
+  if (typeof window !== 'undefined') {
+    try {
+      const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
+      const existing = saved ? JSON.parse(saved) : {};
+      merged = { ...getDefaultConfig(), ...existing, ...config };
+      localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(merged));
+      if (merged.stationId) {
+        localStorage.setItem('business_station_id', merged.stationId);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/station-config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(config),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.config;
+    }
+  } catch (e) {
+    // Netlify static deployment
+  }
+
+  return merged;
 }
 
 export async function fetchOrders(): Promise<BusinessPrintOrder[]> {
+  const localOrders = p2pSync.getPersistedOrders();
+
   try {
     const res = await fetch(`${BASE_URL}/api/orders`);
-    if (!res.ok) throw new Error('Failed to fetch print orders');
-    return await res.json();
+    if (res.ok) {
+      const serverOrders: BusinessPrintOrder[] = await res.json();
+      // Merge unique by ID, preferring server
+      const map = new Map<string, BusinessPrintOrder>();
+      localOrders.forEach((o) => map.set(o.id, o));
+      serverOrders.forEach((o) => map.set(o.id, o));
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    }
   } catch (err) {
-    console.warn('Using local fallback for orders:', err);
-    return [];
+    // Netlify static mode
   }
+
+  return localOrders;
 }
 
 export async function submitCustomerOrder(orderPayload: {
@@ -59,46 +127,120 @@ export async function submitCustomerOrder(orderPayload: {
   doubleSided?: boolean;
   customerNotes?: string;
 }): Promise<{ order: BusinessPrintOrder; stationConfig: StationConfig }> {
-  const res = await fetch(`${BASE_URL}/api/orders`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(orderPayload),
-  });
+  // Construct complete order
+  const unitRate = orderPayload.colorMode === 'color' ? 0.60 : 0.15;
+  const pageCount = orderPayload.fileData?.pageCount || 1;
+  const estimatedPrice = parseFloat((pageCount * orderPayload.copies * unitRate).toFixed(2));
 
-  if (!res.ok) {
-    const errData = await res.json().catch(() => ({}));
-    throw new Error(errData.error || 'Failed to submit print order to shop printer');
+  const order: BusinessPrintOrder = {
+    id: `order-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
+    ticketNumber: `#A-${Math.floor(100 + Math.random() * 900)}`,
+    createdAt: new Date().toISOString(),
+    customerName: orderPayload.customerName?.trim() || 'Guest Customer',
+    customerPhone: orderPayload.customerPhone?.trim() || undefined,
+    fileData: orderPayload.fileData,
+    paperSize: orderPayload.paperSize as any,
+    orientation: orderPayload.orientation as any,
+    colorMode: orderPayload.colorMode as any,
+    copies: orderPayload.copies,
+    pageRange: orderPayload.pageRange,
+    doubleSided: orderPayload.doubleSided,
+    customerNotes: orderPayload.customerNotes?.trim() || undefined,
+    status: 'queued',
+    estimatedPrice,
+    isPaid: false,
+  };
+
+  // 1. Send via P2P WebRTC / BroadcastChannel
+  await p2pSync.sendOrder(order);
+
+  // 2. Try REST API if server exists
+  try {
+    const res = await fetch(`${BASE_URL}/api/orders`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orderPayload),
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (e) {
+    // Netlify static mode
   }
 
-  return await res.json();
+  const stationConfig = await fetchStationConfig();
+  return { order, stationConfig };
 }
 
 export async function updateOrderStatus(
   id: string,
   updates: Partial<BusinessPrintOrder>
 ): Promise<BusinessPrintOrder> {
-  const res = await fetch(`${BASE_URL}/api/orders/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
-  });
-  if (!res.ok) throw new Error('Failed to update order');
-  const data = await res.json();
-  return data.order;
+  // Update local
+  const orders = p2pSync.getPersistedOrders();
+  const target = orders.find((o) => o.id === id);
+  const updated: BusinessPrintOrder = target ? { ...target, ...updates } : ({ id, ...updates } as any);
+  p2pSync.persistOrderLocally(updated);
+
+  if (updates.status) {
+    p2pSync.updateOrderStatus(id, updates.status);
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/orders/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      return data.order;
+    }
+  } catch (e) {
+    // Netlify static mode
+  }
+
+  return updated;
 }
 
 export async function deleteOrder(id: string): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/api/orders/${id}`, {
-    method: 'DELETE',
-  });
-  return res.ok;
+  if (typeof window !== 'undefined') {
+    try {
+      const orders = p2pSync.getPersistedOrders().filter((o) => o.id !== id);
+      localStorage.setItem('station_received_orders', JSON.stringify(orders));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/orders/${id}`, {
+      method: 'DELETE',
+    });
+    return res.ok;
+  } catch (e) {
+    return true;
+  }
 }
 
 export async function clearCompletedOrders(): Promise<boolean> {
-  const res = await fetch(`${BASE_URL}/api/orders/clear-completed`, {
-    method: 'POST',
-  });
-  return res.ok;
+  if (typeof window !== 'undefined') {
+    try {
+      const orders = p2pSync.getPersistedOrders().filter((o) => o.status !== 'completed');
+      localStorage.setItem('station_received_orders', JSON.stringify(orders));
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  try {
+    const res = await fetch(`${BASE_URL}/api/orders/clear-completed`, {
+      method: 'POST',
+    });
+    return res.ok;
+  } catch (e) {
+    return true;
+  }
 }
 
 export function subscribeToOrdersStream(callbacks: {

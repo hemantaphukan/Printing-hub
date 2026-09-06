@@ -112,60 +112,62 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col selection:bg-slate-900 selection:text-white">
-      {/* GLOBAL SYSTEM ROLE SWITCHER BAR (Helps testing between Shop PC and Mobile Customer) */}
-      <div className="bg-slate-950 text-slate-300 text-xs py-2 px-4 border-b border-slate-800 no-print">
-        <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-medium">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-white font-bold">Business Print Hub:</span>
-            <span className="hidden sm:inline text-slate-400">
-              Customer Scans QR ➔ Shop PC reads printing command &amp; prints automatically
-            </span>
-          </div>
+      {/* GLOBAL SYSTEM ROLE SWITCHER BAR (Only displayed on Shop PC & Templates, NEVER for Customers after QR Scan) */}
+      {viewMode !== 'customer-portal' && (
+        <div className="bg-slate-950 text-slate-300 text-xs py-2 px-4 border-b border-slate-800 no-print">
+          <div className="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-white font-bold">Business Print Hub:</span>
+              <span className="hidden sm:inline text-slate-400">
+                Customer Scans QR ➔ Shop PC reads printing command &amp; prints automatically
+              </span>
+            </div>
 
-          {/* Mode Switcher Tabs */}
-          <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
-            <button
-              type="button"
-              onClick={() => setViewMode('shop-station')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg transition cursor-pointer ${
-                viewMode === 'shop-station'
-                  ? 'bg-amber-400 text-slate-950 shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              <Store className="w-3.5 h-3.5" />
-              <span>Shop Owner PC (Connected Printer)</span>
-            </button>
+            {/* Mode Switcher Tabs */}
+            <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800 text-[11px] font-bold">
+              <button
+                type="button"
+                onClick={() => setViewMode('shop-station')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg transition cursor-pointer ${
+                  viewMode === 'shop-station'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>Shop Owner PC (Connected Printer)</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode('customer-portal')}
-              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg transition cursor-pointer ${
-                viewMode === 'customer-portal'
-                  ? 'bg-amber-400 text-slate-950 shadow-xs'
-                  : 'text-slate-300 hover:text-white'
-              }`}
-            >
-              <Smartphone className="w-3.5 h-3.5" />
-              <span>Customer Mobile (Scan &amp; Upload)</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('customer-portal')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg transition cursor-pointer ${
+                  viewMode === 'customer-portal'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'text-slate-300 hover:text-white'
+                }`}
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>Customer Mobile (Scan &amp; Upload)</span>
+              </button>
 
-            <button
-              type="button"
-              onClick={() => setViewMode('template-builder')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition cursor-pointer hidden md:inline-flex ${
-                viewMode === 'template-builder'
-                  ? 'bg-amber-400 text-slate-950 shadow-xs'
-                  : 'text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <Layers className="w-3.5 h-3.5" />
-              <span>Templates</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('template-builder')}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition cursor-pointer hidden md:inline-flex ${
+                  viewMode === 'template-builder'
+                    ? 'bg-amber-400 text-slate-950 shadow-xs'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>Templates</span>
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* VIEW 1: SHOP OWNER PC CONNECTED PRINTER STATION (PRIMARY) */}
       {viewMode === 'shop-station' && (
@@ -177,12 +179,24 @@ export default function App() {
         />
       )}
 
-      {/* VIEW 2: CUSTOMER UPLOAD PORTAL (SCAN QR FROM MOBILE) */}
+      {/* VIEW 2: CUSTOMER UPLOAD PORTAL (SCAN QR FROM MOBILE - ZERO LOGIN) */}
       {viewMode === 'customer-portal' && (
-        <CustomerUploadPortal
-          stationConfig={stationConfig}
-          onSwitchToShopMode={() => setViewMode('shop-station')}
-        />
+        <>
+          <CustomerUploadPortal
+            stationConfig={stationConfig}
+          />
+          {/* Shopkeeper local preview exit button: ONLY visible when manually previewing in desktop browser, NEVER on mobile QR scan */}
+          {!isCustomerModeUrl() && (
+            <button
+              type="button"
+              onClick={() => setViewMode('shop-station')}
+              className="fixed bottom-4 right-4 z-40 bg-slate-900 text-white text-xs font-bold px-4 py-2.5 rounded-full shadow-xl border border-slate-700 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer no-print"
+            >
+              <Store className="w-4 h-4 text-amber-400" />
+              <span>Exit Preview ➔ Shop PC</span>
+            </button>
+          )}
+        </>
       )}
 
       {/* VIEW 3: TEMPLATE / JOB BUILDER & DIRECT LINK GENERATOR */}

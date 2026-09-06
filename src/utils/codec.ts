@@ -5,10 +5,24 @@ import { PrintJob } from '../types';
 const URL_PREFIX = '#print=';
 const STATION_HASH = '#station';
 
-export function buildCustomerUploadUrl(): string {
+export function buildCustomerUploadUrl(stationId?: string): string {
   const origin = window.location.origin || '';
   const pathname = window.location.pathname || '/';
-  return `${origin}${pathname}?mode=customer`;
+  const stationParam = stationId ? `&station=${encodeURIComponent(stationId)}` : '';
+  return `${origin}${pathname}?mode=customer${stationParam}`;
+}
+
+export function getStationIdFromUrl(): string | null {
+  if (typeof window === 'undefined') return null;
+  const params = new URLSearchParams(window.location.search);
+  const station = params.get('station');
+  if (station) return station;
+  // Also check hash for #station=...
+  if (window.location.hash.includes('station=')) {
+    const match = window.location.hash.match(/station=([^&]+)/);
+    if (match && match[1]) return decodeURIComponent(match[1]);
+  }
+  return null;
 }
 
 export function isCustomerModeUrl(): boolean {
